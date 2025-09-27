@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Profile</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #0d82ff;
+            --primary-gradient: linear-gradient(45deg, #0d82ff, #0ac6ff);
+            --background-color: #000000;
+            --surface-color: #121212;
+            --text-color: #ffffff;
+            --border-color: #2a2a2a;
+        }
+        body, html { margin: 0; padding: 0; font-family: 'Poppins', sans-serif; background-color: var(--background-color); color: var(--text-color); }
+        .hidden { display: none !important; }
+        .container { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+        .profile-box { background: var(--surface-color); padding: 40px; border-radius: 16px; width: 100%; max-width: 400px; text-align: center; border: 1px solid var(--border-color); }
+        .profile-header { display: flex; justify-content: space-between; align-items: center; width: 100%; position: absolute; top: 0; left: 0; padding: 20px; }
+        .back-btn { color: white; text-decoration: none; font-size: 24px; }
+        #profile-pic-preview { width: 120px; height: 120px; border-radius: 50%; border: 4px solid var(--primary-color); object-fit: cover; margin-bottom: 20px; cursor: pointer; }
+        .form-group { margin-bottom: 20px; text-align: left; }
+        .form-group label { display: block; margin-bottom: 8px; font-weight: 500; color: #b0b0b0; }
+        .form-control { width: 100%; padding: 14px 20px; border: 1px solid var(--border-color); border-radius: 10px; background-color: #222; color: white; font-size: 16px; box-sizing: border-box; }
+        button { width: 100%; padding: 14px; border: none; border-radius: 10px; cursor: pointer; font-size: 16px; font-weight: 600; margin-top: 10px; }
+        .btn-primary { background: var(--primary-gradient); color: white; }
+        .btn-danger { background: #444; color: #ff4d4d; }
+    </style>
+</head>
+<body>
+    <div class="profile-header">
+        <a href="index.html" class="back-btn">&larr; Back to Stories</a>
+    </div>
+    <div id="loader" style="text-align: center; margin-top: 50vh;">Loading...</div>
+    <div id="profile-container" class="container hidden">
+        <div class="profile-box">
+            <h2>Edit Profile</h2>
+            <label for="profile-pfp-input">
+                <img id="profile-pic-preview" src="https://via.placeholder.com/120" alt="Profile Picture">
+            </label>
+            <input type="file" id="profile-pfp-input" class="hidden" accept="image/*">
+            <div class="form-group">
+                <label for="profile-name-input">Full Name</label>
+                <input type="text" id="profile-name-input" class="form-control">
+            </div>
+            <button id="save-changes-btn" class="btn-primary">Save Changes</button>
+            <button id="logout-btn" class="btn-danger">Log Out</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyD_HBGuQSh_GzqrHqHbgdaoBikLZsK3Qqs", authDomain: "new-all-f99f7.firebaseapp.com", projectId: "new-all-f99f7", storageBucket: "new-all-f99f7.appspot.com", messagingSenderId: "1069748173900", appId: "1:1069748173900:web:158d6336c0f4628133c8e9" };
+        const CLOUDINARY_CLOUD_NAME = "dwgvvzbvn";
+        const CLOUDINARY_UPLOAD_PRESET = "storyapp";
+        const CLOUDINARY_API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}`;
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+
+        const dom = {
+            loader: document.getElementById('loader'),
+            profileContainer: document.getElementById('profile-container'),
+            pfpPreview: document.getElementById('profile-pic-preview'),
+            pfpInput: document.getElementById('profile-pfp-input'),
+            nameInput: document.getElementById('profile-name-input'),
+            saveBtn: document.getElementById('save-changes-btn'),
+            logoutBtn: document.getElementById('logout-btn')
+        };
+        
+        let pfpFile = null;
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                dom.loader.classList.add('hidden');
+                dom.profileContainer.classList.remove('hidden');
+                dom.nameInput.value = user.displayName || '';
+                dom.pfpPreview.src = user.photoURL || 'https://via.placeholder.com/120';
+            } else {
+                window.location.href = 'index.html';
+            }
+        });
+
+        dom.pfpInput.addEventListener('change', (e) => {
+            pfpFile = e.target.files[0];
+            if (pfpFile) {
+                const reader = new FileReader();
+                reader.onload = (event) => { dom.pfpPreview.src = event.target.result; };
+                reader.readAsURL(pfpFile);
+            }
+        });
+
+        dom.saveBtn.addEventListener('click', async () => {
+            dom.saveBtn.disabled = true;
+            dom.saveBtn.textContent = 'Saving...';
+            
+            try {
+                const newName = dom.nameInput.value;
+                let newPhotoURL = auth.currentUser.photoURL;
+
+                if (pfpFile) {
+                    newPhotoURL = await uploadToCloudinary(pfpFile, 'image');
+                }
+
+                await updateProfile(auth.currentUser, {
+                    displayName: newName,
+                    photoURL: newPhotoURL
+                });
+
+                alert('Profile updated successfully!');
+                pfpFile = null;
+
+            } catch (error) {
+                console.error("Profile update error:", error);
+                alert('Failed to update profile.');
+            } finally {
+                dom.saveBtn.disabled = false;
+                dom.saveBtn.textContent = 'Save Changes';
+            }
+        });
+
+        dom.logoutBtn.addEventListener('click', () => {
+            if (confirm('Are you sure you want to log out?')) {
+                signOut(auth);
+            }
+        });
+
+        const uploadToCloudinary = (file, resourceType) => {
+            return new Promise((resolve, reject) => {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', `${CLOUDINARY_API_URL}/${resourceType}/upload`, true);
+                xhr.onload = () => (xhr.status === 200) ? resolve(JSON.parse(xhr.responseText).secure_url) : reject(new Error(xhr.responseText));
+                xhr.onerror = () => reject(new Error('Network error during upload.'));
+                xhr.send(formData);
+            });
+        };
+    </script>
+</body>
+</html>
