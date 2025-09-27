@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Story App</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
+    
+    <style>
+        :root {
+            --primary-color: #0d82ff;
+            --primary-gradient: linear-gradient(45deg, #0d82ff, #0ac6ff);
+            --background-color: #000000;
+            --surface-color: #121212;
+            --text-color: #ffffff;
+            --secondary-text-color: #b0b0b0;
+            --border-color: #2a2a2a;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body, html { margin: 0; padding: 0; font-family: 'Poppins', sans-serif; background-color: var(--background-color); color: var(--text-color); height: 100vh; width: 100vw; overflow: hidden; touch-action: pan-y; }
+        .hidden { display: none !important; }
+
+        /* Loader */
+        #loader-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 9999; display: flex; justify-content: center; align-items: center; }
+        .loader { border: 4px solid rgba(255, 255, 255, 0.2); border-left-color: var(--primary-color); border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Auth */
+        #auth-container { display: flex; justify-content: center; align-items: center; height: 100vh; background: linear-gradient(135deg, #1f2540 0%, #000 100%); }
+        .auth-box { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(15px); padding: 40px; border-radius: 16px; width: 360px; text-align: center; }
+        .auth-form input { width: 100%; padding: 14px 20px; margin-bottom: 15px; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 30px; background: rgba(255, 255, 255, 0.1); color: white; font-size: 16px; }
+        .auth-form button { width: 100%; padding: 14px; background: var(--primary-gradient); color: white; border: none; border-radius: 30px; cursor: pointer; font-size: 16px; font-weight: 600; }
+        #profile-pic-preview { width: 100px; height: 100px; border-radius: 50%; border: 4px solid rgba(255, 255, 255, 0.2); object-fit: cover; }
+        .toggle-form { cursor: pointer; color: var(--secondary-text-color); margin-top: 20px; font-size: 14px; transition: color 0.2s; }
+        .toggle-form:hover { color: var(--primary-color); }
+
+        /* Main App */
+        #app-container { height: 100vh; width: 100vw; }
+        .swiper-container { width: 100%; height: 100%; }
+        .swiper-slide { display: flex; justify-content: center; align-items: center; background-color: #000; position: relative; }
+        .story-media { width: 100%; height: 100%; object-fit: cover; }
+        .story-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: space-between; background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 40%), linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, transparent 30%); pointer-events: none; }
+        .story-overlay > * { pointer-events: all; }
+        
+        /* Story Navigation Tapping */
+       .story-navigation {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    pointer-events: all;
+    z-index: 5;
+}
+        .nav-tap-zone { flex: 1; height: 100%; }
+        
+        .story-progress { position: absolute; top: 8px; left: 3%; right: 3%; width: 94%; height: 3px; background-color: rgba(255, 255, 255, 0.3); border-radius: 3px; z-index: 10; pointer-events: none; }
+        .story-progress-bar { width: 0; height: 100%; background-color: #fff; border-radius: 3px; }
+        .story-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    padding-top: 25px;
+    position: relative; 
+    z-index: 10;        
+}
+        .story-author { display: flex; align-items: center; gap: 12px; }
+        .story-header img { width: 45px; height: 45px; border-radius: 50%; border: 2px solid white; object-fit: cover; }
+        .story-header p { margin: 0; font-weight: 600; font-size: 17px; }
+        .story-meta { display: flex; align-items: center; gap: 15px; }
+        .story-views { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+        .story-music-player { width: 50px; height: 50px; border-radius: 50%; animation: spin 4s linear infinite; background-size: cover; background-position: center; box-shadow: 0 0 15px rgba(0, 150, 255, 0.4); }
+        .story-footer {
+    padding: 20px;
+    position: relative; 
+    z-index: 10;        
+}
+        .story-actions { display: flex; justify-content: space-around; align-items: center; }
+        .action-btn { background: none; border: none; color: white; cursor: pointer; font-size: 28px; }
+        .action-profile-pic { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 2px solid white; }
+        .floating-reaction { position: absolute; bottom: 100px; font-size: 48px; animation: float-up 1.8s forwards; pointer-events: none; opacity: 0; }
+        @keyframes float-up { 0% { transform: translateY(0) scale(0.8); opacity: 1; } 100% { transform: translateY(-250px) scale(1.3); opacity: 0; } }
+
+        /* Fullscreen Modals (Upload & Music) */
+        .fullscreen-modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: var(--surface-color); z-index: 1000; display: flex; flex-direction: column; transform: translateY(100%); transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1); }
+        .fullscreen-modal.visible { transform: translateY(0); }
+        .modal-header { display: flex; align-items: center; padding: 15px 20px; background-color: #1a1a1a; flex-shrink: 0; }
+        .modal-header h2 { margin: 0; font-size: 20px; font-weight: 600; flex-grow: 1; text-align: center; }
+        .modal-back-btn, .modal-close-btn { background: none; border: none; color: white; font-size: 24px; cursor: pointer; width: 40px; height: 40px; }
+        .modal-header .placeholder { width: 40px; }
+
+        /* REDESIGNED UPLOAD PAGE */
+        #upload-fullscreen-modal .modal-body { flex-grow: 1; padding: 25px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; }
+        #media-preview-container { width: 100%; flex-shrink: 0; background: #111; border-radius: 12px; display: flex; align-items: center; justify-content: center; min-height: 250px; overflow: hidden; }
+        #media-preview-container img, #media-preview-container video { max-width: 100%; max-height: 40vh; object-fit: contain; }
+        #media-file-label { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; border: 2px dashed var(--border-color); border-radius: 12px; cursor: pointer; transition: all 0.2s ease; width: 100%; }
+        #media-file-label:hover { border-color: var(--primary-color); background-color: #1f1f1f; }
+        #media-file-label i { font-size: 48px; color: var(--primary-color); margin-bottom: 15px; }
+        .upload-input { width: 100%; padding: 14px; border: none; border-radius: 10px; background-color: #222; color: white; font-size: 16px; }
+        .btn-professional { width: 100%; padding: 14px; border-radius: 10px; border: none; cursor: pointer; font-size: 16px; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        .btn-secondary { background-color: #333; color: #ccc; }
+        #selected-music-info { font-size: 14px; font-weight: 500; text-align: center; background-color: rgba(255, 255, 255, 0.1); padding: 10px 15px; border-radius: 8px; color: var(--primary-color); }
+        #confirm-upload-btn { background: var(--primary-gradient); color: white; font-weight: 600; margin-top: auto; }
+        #confirm-upload-btn:disabled { background: #555; cursor: not-allowed; }
+        #upload-progress-bar { width: 100%; height: 8px; background-color: #2a2a2a; border-radius: 4px; overflow: hidden; margin-top: -10px; }
+        #upload-progress { width: 0%; height: 100%; background: var(--primary-gradient); transition: width 0.4s ease; }
+        
+        /* Music Selection Page */
+        #music-modal .modal-header .modal-back-btn { margin-right: 15px; }
+        #music-search-input { flex-grow: 1; padding: 12px 20px; border: none; border-radius: 30px; background-color: #222; color: white; font-size: 16px; }
+        #music-modal .modal-body { flex-grow: 1; overflow-y: auto; padding: 0 20px; }
+        .music-category h3 { margin: 20px 0 10px; font-size: 18px; color: var(--primary-color); }
+        .music-list { list-style: none; padding: 0; }
+        .music-list-item { display: flex; align-items: center; gap: 15px; padding: 12px; border-radius: 8px; margin-bottom: 10px; background-color: #1a1a1a; }
+        .music-thumbnail { width: 50px; height: 50px; border-radius: 8px; object-fit: cover; }
+        .music-info { flex-grow: 1; }
+        .music-info .title { font-weight: 600; }
+        .music-info .artist { font-size: 14px; color: var(--secondary-text-color); }
+        .music-action-btn { background: none; border: none; color: white; cursor: pointer; font-size: 24px; width: 40px; height: 40px; border-radius: 50%; display: flex; justify-content: center; align-items: center; transition: background-color 0.2s; }
+        .music-action-btn:hover { background-color: rgba(255,255,255,0.1); }
+        
+        /* Sound Modal */
+        .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 1000; display: flex; justify-content: center; align-items: center; }
+        .modal-content { background: var(--surface-color); padding: 30px; border-radius: 16px; width: 90%; max-width: 400px; text-align: center; border: 1px solid var(--border-color); box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+        .modal-content h3 { margin-top: 0; }
+        #allow-sound-btn { width: 100%; padding: 14px; border-radius: 30px; border: none; cursor: pointer; font-weight: 600; background: var(--primary-gradient); color: white; }
+    </style>
+</head>
+<body>
+    <div id="loader-container"><div class="loader"></div></div>
+
+    <div id="auth-container" class="hidden">
+        <!-- Auth forms will be dynamically added by JS -->
+    </div>
+
+    <div id="app-container" class="hidden">
+        <div class="swiper-container"><div class="swiper-wrapper"></div></div>
+    </div>
+
+    <div id="upload-fullscreen-modal" class="fullscreen-modal">
+        <div class="modal-header">
+            <div class="placeholder"></div>
+            <h2>Create Story</h2>
+            <button id="cancel-upload-btn" class="modal-close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="media-preview-container">
+                <label id="media-file-label" for="media-file-input">
+                    <i class="fa-solid fa-cloud-arrow-up"></i>
+                    <span>Select Image or Video</span>
+                </label>
+            </div>
+            <input type="file" id="media-file-input" accept="video/*,image/*" class="hidden">
+            <input type="text" id="caption-input" class="upload-input" placeholder="Write a caption...">
+            <button id="add-music-btn" class="btn-professional btn-secondary hidden"><i class="fa-solid fa-music"></i> Add Music</button>
+            <p id="selected-music-info" class="hidden"></p>
+            <div id="upload-progress-bar" class="hidden"><div id="upload-progress"></div></div>
+            <button id="confirm-upload-btn" class="btn-professional" disabled>Publish Story</button>
+        </div>
+    </div>
+    
+    <div id="music-modal" class="fullscreen-modal">
+        <div class="modal-header">
+            <button id="cancel-music-btn" class="modal-back-btn"><i class="fa-solid fa-arrow-left"></i></button>
+            <input type="text" id="music-search-input" placeholder="Search for music...">
+        </div>
+        <div id="music-modal-body" class="modal-body"></div>
+    </div>
+
+    <div id="sound-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Enable Sound & Autoplay</h3>
+            <p>For the best experience, please allow media to play with sound.</p>
+            <button id="allow-sound-btn">Allow</button>
+        </div>
+    </div>
+    
+    <audio id="story-audio-player" loop></audio>
+    <audio id="music-preview-player"></audio>
+    
+    <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, increment, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyD_HBGuQSh_GzqrHqHbgdaoBikLZsK3Qqs", authDomain: "new-all-f99f7.firebaseapp.com", projectId: "new-all-f99f7", storageBucket: "new-all-f99f7.appspot.com", messagingSenderId: "1069748173900", appId: "1:1069748173900:web:158d6336c0f4628133c8e9" };
+        const CLOUDINARY_CLOUD_NAME = "dwgvvzbvn";
+        const CLOUDINARY_UPLOAD_PRESET = "storyapp";
+        const CLOUDINARY_API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}`;
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        const dom = { 
+            loaderContainer: document.getElementById('loader-container'), 
+            authContainer: document.getElementById('auth-container'), 
+            appContainer: document.getElementById('app-container'), 
+            uploadModal: document.getElementById('upload-fullscreen-modal'),
+            musicModal: document.getElementById('music-modal'),
+            soundModal: document.getElementById('sound-modal'), 
+            swiperWrapper: document.querySelector('.swiper-wrapper'),
+            storyAudioPlayer: document.getElementById('story-audio-player'),
+            musicPreviewPlayer: document.getElementById('music-preview-player'),
+            mediaFileInput: document.getElementById('media-file-input'),
+            selectedMusicInfo: document.getElementById('selected-music-info'),
+            addMusicBtn: document.getElementById('add-music-btn'),
+        };
+
+        let currentUser = null, swiper, isAudioUnlocked = false, viewedStories = new Set(), selectedMusic = null, allMusicData = [], progressAnimationId = null;
+
+        const initSwiper = () => {
+            swiper = new Swiper('.swiper-container', { direction: 'horizontal', loop: false, on: { slideChange: handleSlideChange }});
+        };
+
+        // --- NEW: Function to animate the progress bar ---
+        const startProgressBarAnimation = (mediaElement, onFinish) => {
+            cancelAnimationFrame(progressAnimationId); // Stop any previous animation
+            const progressBar = swiper.slides[swiper.activeIndex]?.querySelector('.story-progress-bar');
+            if (!progressBar) return;
+
+            const duration = mediaElement.duration;
+            let startTime = null;
+
+            function animate(timestamp) {
+                if (!startTime) startTime = timestamp;
+                const elapsedTime = timestamp - startTime;
+                
+                const progress = Math.min(elapsedTime / (duration * 1000), 1);
+                progressBar.style.width = `${progress * 100}%`;
+
+                if (progress < 1) {
+                    progressAnimationId = requestAnimationFrame(animate);
+                } else {
+                    onFinish();
+                }
+            }
+            progressAnimationId = requestAnimationFrame(animate);
+        };
+        
+        const handleSlideChange = () => {
+            // Stop all media from previous slide
+            cancelAnimationFrame(progressAnimationId);
+            dom.storyAudioPlayer.pause();
+            document.querySelectorAll('.story-media[data-type="video"]').forEach(v => v.pause());
+
+            const activeSlide = swiper.slides[swiper.activeIndex];
+            if (!activeSlide) return;
+
+            const progressBar = activeSlide.querySelector('.story-progress-bar');
+            if(progressBar) progressBar.style.width = '0%'; // Reset progress bar
+
+            const activeVideo = activeSlide.querySelector('.story-media[data-type="video"]');
+            const activeImage = activeSlide.querySelector('.story-media[data-type="image"]');
+            const musicUrl = activeSlide.dataset.musicUrl;
+            
+            if (activeVideo) {
+                activeVideo.currentTime = 0;
+                activeVideo.muted = !!musicUrl || !isAudioUnlocked;
+                activeVideo.play().catch(() => {});
+                activeVideo.oncanplay = () => {
+                    startProgressBarAnimation(activeVideo, () => swiper.slideNext());
+                };
+            }
+            
+            if (musicUrl && isAudioUnlocked) {
+                dom.storyAudioPlayer.src = musicUrl;
+                dom.storyAudioPlayer.play().catch(e => console.error("Audio play failed", e));
+                if (activeImage) {
+                    dom.storyAudioPlayer.onloadedmetadata = () => {
+                        startProgressBarAnimation(dom.storyAudioPlayer, () => swiper.slideNext());
+                    };
+                }
+            }
+
+            const storyId = activeSlide.dataset.storyId;
+            if (storyId && !viewedStories.has(storyId)) {
+                incrementViewCount(storyId);
+                viewedStories.add(storyId);
+            }
+        };
+        
+        const unlockAudio = async () => {
+            dom.soundModal.classList.add('hidden');
+            if (isAudioUnlocked) return;
+            isAudioUnlocked = true;
+            dom.storyAudioPlayer.muted = false;
+            handleSlideChange();
+        };
+
+        const handleAuthStateChange = (user) => {
+            if (user) {
+                currentUser = user;
+                dom.authContainer.classList.add('hidden');
+                dom.appContainer.classList.remove('hidden');
+                dom.loaderContainer.classList.add('hidden');
+                if (!isAudioUnlocked) dom.soundModal.classList.remove('hidden');
+                if (!swiper) initSwiper();
+                fetchAndRenderStories();
+            } else {
+                currentUser = null;
+                dom.authContainer.classList.remove('hidden');
+                dom.appContainer.classList.add('hidden');
+                dom.loaderContainer.classList.add('hidden');
+                if (swiper) { swiper.destroy(true, true); swiper = null; }
+            }
+        };
+
+        const fetchAndRenderStories = () => {
+            const q = query(collection(db, 'stories'), orderBy('createdAt', 'desc'));
+            onSnapshot(q, (snapshot) => {
+                const stories = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderStories(stories);
+            });
+        };
+
+        const renderStories = (stories) => {
+            dom.swiperWrapper.innerHTML = stories.map((story) => {
+                const mediaElement = story.mediaType === 'video' ? `<video class="story-media" data-type="video" src="${story.mediaUrl}" playsinline loop muted></video>` : `<img class="story-media" data-type="image" src="${story.mediaUrl}" alt="Story">`;
+                let musicPlayerElement = story.musicUrl ? `<div class="story-music-player" title="${story.musicTitle}" style="background-image: url('${story.musicThumbnailUrl}')"></div>` : '';
+                const finalActionButton = story.authorId === currentUser.uid
+                    ? `<button class="action-btn" data-action="delete" title="Delete Story"><i class="fa-solid fa-trash"></i></button>`
+                    : `<a href="#"><img src="${currentUser.photoURL || 'https://via.placeholder.com/32'}" class="action-profile-pic" alt="My Profile"></a>`;
+
+                return `<div class="swiper-slide" data-story-id="${story.id}" data-music-url="${story.musicUrl || ''}">
+                        ${mediaElement}
+                        <div class="story-overlay">
+                            <!-- NEW: Tap zones for navigation -->
+                            <div class="story-navigation">
+                                <div class="nav-tap-zone" data-action="prev-story"></div>
+                                <div class="nav-tap-zone" data-action="next-story"></div>
+                            </div>
+                            <div class="story-progress"><div class="story-progress-bar"></div></div>
+                            <div class="story-header">
+                                <div class="story-author"><img src="${story.authorPhoto || 'https://via.placeholder.com/45'}" alt="${story.authorName}"><p>${story.authorName || 'Anonymous'}</p></div>
+                                <div class="story-meta">${musicPlayerElement}<div class="story-views"><i class="fa-solid fa-eye"></i><span>${story.views || 0}</span></div></div>
+                            </div>
+                            <div class="story-footer">
+                                <p style="padding: 0 10px; margin-bottom: 15px;">${story.caption || ''}</p>
+                                <div class="story-actions">
+                                    <button class="action-btn" data-action="upload" title="Upload Story"><i class="fa-solid fa-plus"></i></button>
+                                    <button class="action-btn" data-action="react" data-emoji="❤️" title="Love"><i class="fa-solid fa-heart"></i></button>
+                                    <button class="action-btn" data-action="react" data-emoji="😂" title="Haha"><i class="fa-solid fa-laugh-squint"></i></button>
+                                    <button class="action-btn" data-action="react" data-emoji="😮" title="Wow"><i class="fa-solid fa-surprise"></i></button>
+                                    ${finalActionButton}
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+            }).join('');
+            if (swiper) { swiper.update(); swiper.slideTo(0, 0); setTimeout(handleSlideChange, 100); }
+        };
+        
+        // --- FIXED: Reaction Animation Function ---
+        const showFloatingReaction = (emoji, container) => {
+            if (!container) return;
+            const reaction = document.createElement('div');
+            reaction.className = 'floating-reaction';
+            reaction.textContent = emoji;
+            // Position the reaction where the user clicked for a better effect
+            reaction.style.left = `${Math.random() * 40 + 30}%`;
+            container.appendChild(reaction);
+            reaction.addEventListener('animationend', () => reaction.remove());
+        };
+
+        const handleDocumentClick = (e) => {
+            const target = e.target, closest = (s) => target.closest(s);
+            if (closest('[data-action="react"]')) showFloatingReaction(closest('[data-action="react"]').dataset.emoji, closest('.swiper-slide'));
+            if (closest('[data-action="upload"]')) showUploadModal();
+            if (closest('[data-action="delete"]')) { if (confirm('Delete this story permanently?')) deleteStory(closest('.swiper-slide')?.dataset.storyId); }
+            if (closest('[data-action="select-music"]')) selectMusic(closest('[data-action="select-music"]').dataset.musicIndex);
+            if (closest('[data-action="preview-music"]')) previewMusic(closest('[data-action="preview-music"]'));
+            if (closest('.toggle-form')) { document.getElementById('login-form').classList.toggle('hidden'); document.getElementById('signup-form').classList.toggle('hidden'); }
+            if (target.id === 'cancel-upload-btn') resetAndCloseUploadModal();
+            if (target.id === 'confirm-upload-btn') handleUploadConfirm();
+            if (target.id === 'allow-sound-btn') unlockAudio();
+            if (target.id === 'add-music-btn') showMusicModal();
+            if (target.id === 'cancel-music-btn') hideMusicModal();
+
+            // --- NEW: Story Navigation Click Handler ---
+            if (closest('[data-action="next-story"]')) swiper.slideNext();
+            if (closest('[data-action="prev-story"]')) swiper.slidePrev();
+        };
+
+        const showUploadModal = () => dom.uploadModal.classList.add('visible');
+        const showMusicModal = async () => {
+            dom.musicModal.classList.add('visible');
+            const musicBody = document.getElementById('music-modal-body');
+            musicBody.innerHTML = '<div class="loader" style="margin: 50px auto;"></div>';
+            try {
+                const categoriesSnapshot = await getDocs(collection(db, "musicCategories"));
+                const musicSnapshot = await getDocs(query(collection(db, "music"), orderBy("title")));
+                const categories = categoriesSnapshot.docs.map(doc => doc.data().name);
+                allMusicData = musicSnapshot.docs.map((doc, index) => ({ id: doc.id, index, ...doc.data() }));
+                renderMusicList(allMusicData, categories);
+            } catch (error) { console.error("Error fetching music:", error); musicBody.innerHTML = '<p>Could not load music.</p>'; }
+        };
+
+        const hideMusicModal = () => {
+            dom.musicModal.classList.remove('visible');
+            dom.musicPreviewPlayer.pause();
+            document.querySelectorAll('[data-action="preview-music"] i').forEach(i => i.className = 'fa-solid fa-play');
+        };
+
+        const renderMusicList = (music, categories) => {
+            const musicBody = document.getElementById('music-modal-body');
+            let html = '';
+            categories.forEach(category => {
+                const songsInCategory = music.filter(song => song.category === category);
+                if (songsInCategory.length > 0) {
+                    html += `<div class="music-category"><h3>${category}</h3><ul class="music-list">`;
+                    songsInCategory.forEach(song => {
+                        html += `<li class="music-list-item">
+                            <img src="${song.thumbnailUrl}" alt="${song.title}" class="music-thumbnail">
+                            <div class="music-info"><p class="title">${song.title}</p><p class="artist">${song.artist}</p></div>
+                            <button class="music-action-btn" data-action="preview-music" data-url="${song.audioUrl}"><i class="fa-solid fa-play"></i></button>
+                            <button class="music-action-btn" data-action="select-music" data-music-index="${song.index}"><i class="fa-solid fa-plus"></i></button>
+                        </li>`;
+                    });
+                    html += `</ul></div>`;
+                }
+            });
+            musicBody.innerHTML = html;
+        };
+
+        const previewMusic = (button) => {
+            const url = button.dataset.url;
+            const icon = button.querySelector('i');
+            if (dom.musicPreviewPlayer.src === url && !dom.musicPreviewPlayer.paused) {
+                dom.musicPreviewPlayer.pause();
+                icon.className = 'fa-solid fa-play';
+            } else {
+                document.querySelectorAll('[data-action="preview-music"] i').forEach(i => i.className = 'fa-solid fa-play');
+                dom.musicPreviewPlayer.src = url;
+                dom.musicPreviewPlayer.play();
+                icon.className = 'fa-solid fa-pause';
+            }
+            dom.musicPreviewPlayer.onended = () => { icon.className = 'fa-solid fa-play'; };
+        };
+
+        const selectMusic = (musicIndex) => {
+            selectedMusic = allMusicData[musicIndex];
+            dom.selectedMusicInfo.textContent = `🎵 ${selectedMusic.title} - ${selectedMusic.artist}`;
+            dom.selectedMusicInfo.classList.remove('hidden');
+            hideMusicModal();
+        };
+
+        const incrementViewCount = async (storyId) => { await updateDoc(doc(db, 'stories', storyId), { views: increment(1) }); };
+        const deleteStory = async (storyId) => { try { await deleteDoc(doc(db, 'stories', storyId)); } catch (error) { console.error("Error deleting story: ", error); alert("Could not delete the story."); }};
+        
+        const handleUploadConfirm = async () => {
+            const mediaFile = dom.mediaFileInput.files[0];
+            const caption = document.getElementById('caption-input').value;
+            if (!mediaFile) return alert('Please select a file.');
+            const uploadBtn = document.getElementById('confirm-upload-btn');
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'Publishing...';
+            document.getElementById('upload-progress-bar').classList.remove('hidden');
+            const mediaType = mediaFile.type.startsWith('video/') ? 'video' : 'image';
+            try {
+                const mediaUrl = await uploadToCloudinary(mediaFile, mediaType, (p) => { document.getElementById('upload-progress').style.width = `${p}%`; });
+                const storyData = { mediaUrl, mediaType, caption, authorId: currentUser.uid, authorName: currentUser.displayName, authorPhoto: currentUser.photoURL, createdAt: serverTimestamp(), views: 0 };
+                if (selectedMusic) {
+                    storyData.musicUrl = selectedMusic.audioUrl;
+                    storyData.musicTitle = selectedMusic.title;
+                    storyData.musicThumbnailUrl = selectedMusic.thumbnailUrl;
+                }
+                await addDoc(collection(db, 'stories'), storyData);
+                alert('Story published successfully!');
+                resetAndCloseUploadModal();
+            } catch (error) { 
+                console.error("Upload Failed:", error);
+                alert(`Upload failed: ${error.message}`);
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'Publish Story';
+            } finally {
+                document.getElementById('upload-progress-bar').classList.add('hidden');
+                document.getElementById('upload-progress').style.width = '0%';
+            }
+        };
+
+        const handleMediaFileChange = (e) => {
+            const previewContainer = document.getElementById('media-preview-container');
+            dom.addMusicBtn.classList.add('hidden');
+            dom.selectedMusicInfo.classList.add('hidden');
+            dom.selectedMusicInfo.textContent = '';
+            selectedMusic = null;
+            const confirmBtn = document.getElementById('confirm-upload-btn');
+            const file = e.target.files[0];
+            if (file) {
+                const url = URL.createObjectURL(file);
+                const isVideo = file.type.startsWith('video/');
+                const previewEl = document.createElement(isVideo ? 'video' : 'img');
+                if (isVideo) { previewEl.muted = true; previewEl.autoplay = true; previewEl.loop = true; }
+                previewEl.src = url;
+                previewContainer.innerHTML = '';
+                previewContainer.appendChild(previewEl);
+                dom.addMusicBtn.classList.remove('hidden');
+                confirmBtn.disabled = false;
+            } else {
+                previewContainer.innerHTML = `<label id="media-file-label" for="media-file-input"><i class="fa-solid fa-cloud-arrow-up"></i><span>Select Image or Video</span></label>`;
+                confirmBtn.disabled = true;
+            }
+        };
+
+        const resetAndCloseUploadModal = () => { 
+            dom.uploadModal.classList.remove('visible'); 
+            setTimeout(() => {
+                document.getElementById('caption-input').value = '';
+                dom.mediaFileInput.value = null; 
+                document.getElementById('media-preview-container').innerHTML = `<label id="media-file-label" for="media-file-input"><i class="fa-solid fa-cloud-arrow-up"></i><span>Select Image or Video</span></label>`;
+                document.getElementById('upload-progress-bar').classList.add('hidden'); 
+                document.getElementById('upload-progress').style.width = '0%'; 
+                const confirmBtn = document.getElementById('confirm-upload-btn');
+                confirmBtn.disabled = true;
+                confirmBtn.textContent = 'Publish Story';
+                selectedMusic = null;
+                dom.selectedMusicInfo.textContent = '';
+                dom.selectedMusicInfo.classList.add('hidden');
+                dom.addMusicBtn.classList.add('hidden');
+            }, 400);
+        };
+
+        const handlePfpChange = (e) => { if (e.target.files[0]) { const reader = new FileReader(); reader.onload = (event) => { document.getElementById('profile-pic-preview').src = event.target.result; }; reader.readAsURL(e.target.files[0]); } };
+        
+        const uploadToCloudinary = (file, resourceType, onProgress) => { return new Promise((resolve, reject) => { const formData = new FormData(); formData.append('file', file); formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET); const xhr = new XMLHttpRequest(); xhr.open('POST', `${CLOUDINARY_API_URL}/${resourceType}/upload`, true); xhr.upload.onprogress = (e) => onProgress?.(Math.round((e.loaded / e.total) * 100)); xhr.onload = () => (xhr.status === 200) ? resolve(JSON.parse(xhr.responseText).secure_url) : reject(new Error(xhr.responseText)); xhr.onerror = () => reject(new Error('Network error during upload.')); xhr.send(formData); }); };
+
+        // Setup Event Listeners
+        onAuthStateChanged(auth, handleAuthStateChange);
+        document.addEventListener('click', handleDocumentClick);
+        dom.mediaFileInput.addEventListener('change', handleMediaFileChange);
+        document.getElementById('music-search-input').addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            const filteredMusic = allMusicData.filter(song => song.title.toLowerCase().includes(searchTerm) || song.artist.toLowerCase().includes(searchTerm));
+            renderMusicList(filteredMusic, [...new Set(filteredMusic.map(s => s.category))]);
+        });
+        
+        // Dynamically add auth forms and their listeners
+        dom.authContainer.innerHTML = `<div class="auth-box">
+             <div id="login-form" class="auth-form"><h2>Welcome Back</h2><input type="email" id="login-email" placeholder="Email" required><input type="password" id="login-password" placeholder="Password" required><button id="login-btn">Log In</button><p class="toggle-form" data-target="signup-form">Don't have an account? Sign Up</p></div>
+             <div id="signup-form" class="auth-form hidden"><h2>Create Account</h2><div class="profile-pic-upload"><label for="signup-pfp"><img id="profile-pic-preview" src="https://via.placeholder.com/100" alt="Profile"></label><input type="file" id="signup-pfp" accept="image/*" class="hidden"></div><input type="text" id="signup-name" placeholder="Full Name" required><input type="email" id="signup-email" placeholder="Email" required><input type="password" id="signup-password" placeholder="Password" required><button id="signup-btn">Sign Up</button><p class="toggle-form" data-target="login-form">Already have an account? Log In</p></div>
+        </div>`;
+        document.getElementById('signup-pfp').addEventListener('change', handlePfpChange);
+        document.getElementById('signup-btn').addEventListener('click', async () => {
+            dom.loaderContainer.classList.remove('hidden');
+            const name = document.getElementById('signup-name').value, email = document.getElementById('signup-email').value, password = document.getElementById('signup-password').value, pfpFile = document.getElementById('signup-pfp').files[0];
+            try {
+                if(!name || !email || !password) throw new Error("Please fill all fields.");
+                let photoURL = 'https://via.placeholder.com/100';
+                if (pfpFile) photoURL = await uploadToCloudinary(pfpFile, 'image', null);
+                const cred = await createUserWithEmailAndPassword(auth, email, password);
+                await updateProfile(cred.user, { displayName: name, photoURL });
+            } catch (error) { alert(`Signup failed: ${error.message}`); } finally { dom.loaderContainer.classList.add('hidden'); }
+        });
+        document.getElementById('login-btn').addEventListener('click', async () => {
+            dom.loaderContainer.classList.remove('hidden');
+            const email = document.getElementById('login-email').value, password = document.getElementById('login-password').value;
+            try { 
+                if(!email || !password) throw new Error("Please fill all fields.");
+                await signInWithEmailAndPassword(auth, email, password); 
+            } 
+            catch (error) { alert(`Login failed: ${error.message}`); } finally { dom.loaderContainer.classList.add('hidden'); }
+        });
+
+    </script>
+</body>
+</html>
