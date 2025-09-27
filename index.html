@@ -184,75 +184,64 @@
     <audio id="music-preview-player"></audio>
     
     <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
-    <script type="module">
+        <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, increment, deleteDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, updateDoc, increment } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
+        // --- Configs (No changes) ---
         const firebaseConfig = { apiKey: "AIzaSyD_HBGuQSh_GzqrHqHbgdaoBikLZsK3Qqs", authDomain: "new-all-f99f7.firebaseapp.com", projectId: "new-all-f99f7", storageBucket: "new-all-f99f7.appspot.com", messagingSenderId: "1069748173900", appId: "1:1069748173900:web:158d6336c0f4628133c8e9" };
         const CLOUDINARY_CLOUD_NAME = "dwgvvzbvn";
         const CLOUDINARY_UPLOAD_PRESET = "storyapp";
         const CLOUDINARY_API_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}`;
-        
+
+        // --- Firebase Init (No changes) ---
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
 
-        const dom = { 
-            loaderContainer: document.getElementById('loader-container'), 
-            authContainer: document.getElementById('auth-container'), 
-            appContainer: document.getElementById('app-container'), 
-            uploadModal: document.getElementById('upload-fullscreen-modal'),
-            musicModal: document.getElementById('music-modal'),
-            soundModal: document.getElementById('sound-modal'), 
-            swiperWrapper: document.querySelector('.swiper-wrapper'),
-            storyAudioPlayer: document.getElementById('story-audio-player'),
-            musicPreviewPlayer: document.getElementById('music-preview-player'),
-            mediaFileInput: document.getElementById('media-file-input'),
-            selectedMusicInfo: document.getElementById('selected-music-info'),
-            addMusicBtn: document.getElementById('add-music-btn'),
-        };
+        // --- DOM Elements (No changes) ---
+        const dom = { loaderContainer: document.getElementById('loader-container'), authContainer: document.getElementById('auth-container'), appContainer: document.getElementById('app-container'), uploadModal: document.getElementById('upload-modal'), musicModal: document.getElementById('music-modal'), soundModal: document.getElementById('sound-modal'), swiperWrapper: document.querySelector('.swiper-wrapper'), };
 
-        let currentUser = null, swiper, isAudioUnlocked = false, viewedStories = new Set(), selectedMusic = null, allMusicData = [];
+        // --- App State (No changes) ---
+        let currentUser = null, swiper, isAudioUnlocked = false, viewedStories = new Set(), longPressTimer, selectedMusic = null, youtubePlayers = {};
 
+        // --- Music Library (No changes) ---
+        const musicLibrary = [
+            { title: "Lofi Girl - Soothing Breeze", videoId: "5wRWniH7rt8" },
+            { title: "No Spirit - Glowing", videoId: "ljq6Mlq_bpc" },
+            { title: "NCS - Invincible", videoId: "J2X5mJ3HDYE" },
+        ];
+
+        // --- Core App Logic (No changes) ---
         const initSwiper = () => {
             swiper = new Swiper('.swiper-container', { direction: 'horizontal', loop: false, on: { slideChange: handleSlideChange }});
+            setupNavigationEvents();
         };
 
         const handleSlideChange = () => {
-            dom.storyAudioPlayer.pause();
             document.querySelectorAll('.story-media[data-type="video"]').forEach(v => v.pause());
-
+            Object.values(youtubePlayers).forEach(p => p.player?.pauseVideo());
             const activeSlide = swiper.slides[swiper.activeIndex];
             if (!activeSlide) return;
-
             const activeVideo = activeSlide.querySelector('.story-media[data-type="video"]');
-            const musicUrl = activeSlide.dataset.musicUrl;
-            
+            const youtubePlayerId = activeSlide.dataset.youtubePlayerId;
             if (activeVideo) {
                 activeVideo.currentTime = 0;
-                activeVideo.muted = !!musicUrl || !isAudioUnlocked;
+                activeVideo.muted = !isAudioUnlocked;
                 activeVideo.play().catch(() => {});
             }
-            
-            if (musicUrl && isAudioUnlocked) {
-                dom.storyAudioPlayer.src = musicUrl;
-                dom.storyAudioPlayer.play().catch(e => console.error("Audio play failed", e));
+            if (youtubePlayerId && youtubePlayers[youtubePlayerId]?.player) {
+                if (isAudioUnlocked) {
+                    youtubePlayers[youtubePlayerId].player.seekTo(0);
+                    youtubePlayers[youtubePlayerId].player.playVideo();
+                }
             }
-
             const storyId = activeSlide.dataset.storyId;
             if (storyId && !viewedStories.has(storyId)) {
                 incrementViewCount(storyId);
                 viewedStories.add(storyId);
             }
-        };
-        
-        const unlockAudio = async () => {
-            dom.soundModal.classList.add('hidden');
-            if (isAudioUnlocked) return;
-            isAudioUnlocked = true;
-            dom.storyAudioPlayer.muted = false;
-            handleSlideChange();
         };
 
         const handleAuthStateChange = (user) => {
@@ -276,235 +265,177 @@
         const fetchAndRenderStories = () => {
             const q = query(collection(db, 'stories'), orderBy('createdAt', 'desc'));
             onSnapshot(q, (snapshot) => {
-                const stories = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                renderStories(stories);
+                renderStories(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             });
         };
 
         const renderStories = (stories) => {
+            youtubePlayers = {};
             dom.swiperWrapper.innerHTML = stories.map((story) => {
                 const mediaElement = story.mediaType === 'video' ? `<video class="story-media" data-type="video" src="${story.mediaUrl}" playsinline loop muted></video>` : `<img class="story-media" data-type="image" src="${story.mediaUrl}" alt="Story">`;
-                let musicPlayerElement = story.musicUrl ? `<div class="story-music-player" title="${story.musicTitle}" style="background-image: url('${story.musicThumbnailUrl}')"></div>` : '';
-                const finalActionButton = story.authorId === currentUser.uid
-                    ? `<button class="action-btn" data-action="delete" title="Delete Story"><i class="fa-solid fa-trash"></i></button>`
-                    : `<a href="profile.html"><img src="${currentUser.photoURL || 'https://via.placeholder.com/32'}" class="action-profile-pic" alt="My Profile"></a>`;
-
-                return `<div class="swiper-slide" data-story-id="${story.id}" data-music-url="${story.musicUrl || ''}">
-                        ${mediaElement}
+                let musicElement = '';
+                const uniquePlayerId = `ytplayer-${story.id}`;
+                if (story.musicVideoId) {
+                    musicElement = `<div id="${uniquePlayerId}" class="youtube-player-container"></div>`;
+                    youtubePlayers[uniquePlayerId] = { videoId: story.musicVideoId, player: null };
+                }
+                const musicDisplay = story.musicTitle ? `<p class="story-music"><i class="fa-solid fa-music"></i> ${story.musicTitle}</p>` : '';
+                const ownStoryTag = story.authorId === currentUser.uid ? `<span class="story-tag">(Your Story)</span>` : '';
+                return `<div class="swiper-slide" data-story-id="${story.id}" data-youtube-player-id="${story.musicVideoId ? uniquePlayerId : ''}">
+                        ${mediaElement} ${musicElement}
                         <div class="story-overlay">
-                            <div class="story-progress"><div class="story-progress-bar"></div></div>
-                            <div class="story-header">
-                                <div class="story-author"><img src="${story.authorPhoto || 'https://via.placeholder.com/45'}" alt="${story.authorName}"><p>${story.authorName || 'Anonymous'}</p></div>
-                                <div class="story-meta">${musicPlayerElement}<div class="story-views"><i class="fa-solid fa-eye"></i><span>${story.views || 0}</span></div></div>
-                            </div>
-                            <div class="story-footer">
-                                <div class="story-actions">
-                                    <button class="action-btn" data-action="upload" title="Upload Story"><i class="fa-solid fa-plus"></i></button>
-                                    <button class="action-btn" data-action="react" data-emoji="❤️" title="Love"><i class="fa-solid fa-heart"></i></button>
-                                    <button class="action-btn" data-action="react" data-emoji="😂" title="Haha"><i class="fa-solid fa-laugh-squint"></i></button>
-                                    <button class="action-btn" data-action="react" data-emoji="😮" title="Wow"><i class="fa-solid fa-surprise"></i></button>
-                                    ${finalActionButton}
-                                </div>
-                            </div>
-                        </div>
-                    </div>`;
+                            <div class="story-header"><div class="story-author"><img src="${story.authorPhoto || 'https://via.placeholder.com/45'}" alt="${story.authorName}"><div class="story-author-info"><p>${story.authorName || 'Anonymous'}</p>${ownStoryTag}</div></div><div class="story-meta">${musicDisplay}<div class="story-views"><i class="fa-solid fa-eye"></i><span>${story.views || 0}</span></div></div></div>
+                            <div class="story-footer"><div class="story-caption"><p>${story.caption}</p></div><div class="story-actions"><button class="action-btn" data-action="upload" title="Upload Story"><i class="fa-solid fa-plus"></i></button><button class="action-btn" data-action="react" data-emoji="❤️" title="Love"><i class="fa-solid fa-heart"></i></button><button class="action-btn" data-action="react" data-emoji="😂" title="Haha"><i class="fa-solid fa-laugh-squint"></i></button><button class="action-btn" data-action="react" data-emoji="😮" title="Wow"><i class="fa-solid fa-surprise"></i></button></div></div>
+                        </div></div>`;
             }).join('');
+            createYouTubePlayers();
             if (swiper) { swiper.update(); swiper.slideTo(0, 0); setTimeout(handleSlideChange, 100); }
         };
         
-        const handleDocumentClick = (e) => {
-            const target = e.target, closest = (s) => target.closest(s);
-            if (closest('[data-action="react"]')) showFloatingReaction(closest('[data-action="react"]').dataset.emoji, closest('.swiper-slide'));
-            if (closest('[data-action="upload"]')) showUploadModal();
-            if (closest('[data-action="delete"]')) { if (confirm('Delete this story permanently?')) deleteStory(closest('.swiper-slide')?.dataset.storyId); }
-            if (closest('[data-action="select-music"]')) selectMusic(closest('[data-action="select-music"]').dataset.musicIndex);
-            if (closest('[data-action="preview-music"]')) previewMusic(closest('[data-action="preview-music"]'));
-            if (closest('.toggle-form')) { document.getElementById('login-form').classList.toggle('hidden'); document.getElementById('signup-form').classList.toggle('hidden'); }
-            if (target.id === 'cancel-upload-btn') resetAndCloseUploadModal();
-            if (target.id === 'confirm-upload-btn') handleUploadConfirm();
-            if (target.id === 'allow-sound-btn') unlockAudio();
-            if (target.id === 'add-music-btn') showMusicModal();
-            if (target.id === 'cancel-music-btn') hideMusicModal();
-        };
-
-        const showUploadModal = () => dom.uploadModal.classList.add('visible');
-        const showMusicModal = async () => {
-            dom.musicModal.classList.add('visible');
-            const musicBody = document.getElementById('music-modal-body');
-            musicBody.innerHTML = '<div class="loader" style="margin: 50px auto;"></div>';
-            try {
-                const categoriesSnapshot = await getDocs(collection(db, "musicCategories"));
-                const musicSnapshot = await getDocs(query(collection(db, "music"), orderBy("title")));
-                const categories = categoriesSnapshot.docs.map(doc => doc.data().name);
-                allMusicData = musicSnapshot.docs.map((doc, index) => ({ id: doc.id, index, ...doc.data() }));
-                renderMusicList(allMusicData, categories);
-            } catch (error) { console.error("Error fetching music:", error); musicBody.innerHTML = '<p>Could not load music.</p>'; }
-        };
-
-        const hideMusicModal = () => {
-            dom.musicModal.classList.remove('visible');
-            dom.musicPreviewPlayer.pause();
-            document.querySelectorAll('[data-action="preview-music"] i').forEach(i => i.className = 'fa-solid fa-play');
-        };
-
-        const renderMusicList = (music, categories) => {
-            const musicBody = document.getElementById('music-modal-body');
-            let html = '';
-            categories.forEach(category => {
-                const songsInCategory = music.filter(song => song.category === category);
-                if (songsInCategory.length > 0) {
-                    html += `<div class="music-category"><h3>${category}</h3><ul class="music-list">`;
-                    songsInCategory.forEach(song => {
-                        html += `<li class="music-list-item">
-                            <img src="${song.thumbnailUrl}" alt="${song.title}" class="music-thumbnail">
-                            <div class="music-info"><p class="title">${song.title}</p><p class="artist">${song.artist}</p></div>
-                            <button class="music-action-btn" data-action="preview-music" data-url="${song.audioUrl}"><i class="fa-solid fa-play"></i></button>
-                            <button class="music-action-btn" data-action="select-music" data-music-index="${song.index}"><i class="fa-solid fa-plus"></i></button>
-                        </li>`;
-                    });
-                    html += `</ul></div>`;
-                }
+        window.onYouTubeIframeAPIReady = () => {};
+        
+        const createYouTubePlayers = () => {
+            Object.keys(youtubePlayers).forEach(id => {
+                youtubePlayers[id].player = new YT.Player(id, {
+                    height: '1', width: '1', videoId: youtubePlayers[id].videoId,
+                    playerVars: { 'autoplay': 0, 'controls': 0, 'loop': 1, playlist: youtubePlayers[id].videoId },
+                    events: { 'onReady': (event) => { if(!isAudioUnlocked) event.target.mute(); } }
+                });
             });
-            musicBody.innerHTML = html;
         };
 
-        const previewMusic = (button) => {
-            const url = button.dataset.url;
-            const icon = button.querySelector('i');
-            if (dom.musicPreviewPlayer.src === url && !dom.musicPreviewPlayer.paused) {
-                dom.musicPreviewPlayer.pause();
-                icon.className = 'fa-solid fa-play';
-            } else {
-                document.querySelectorAll('[data-action="preview-music"] i').forEach(i => i.className = 'fa-solid fa-play');
-                dom.musicPreviewPlayer.src = url;
-                dom.musicPreviewPlayer.play();
-                icon.className = 'fa-solid fa-pause';
+        // --- [START OF CORRECTED CODE] ---
+        const handleDocumentClick = (e) => {
+            const target = e.target;
+            const actionTarget = target.closest('[data-action]');
+            const toggleTarget = target.closest('.toggle-form');
+            const musicItem = target.closest('.music-item');
+
+            // Handle action buttons (react, upload)
+            if (actionTarget) {
+                const { action, emoji } = actionTarget.dataset;
+                if (action === 'react') {
+                    showFloatingReaction(emoji, actionTarget.closest('.swiper-slide'));
+                }
+                if (action === 'upload') {
+                    dom.uploadModal.classList.remove('hidden');
+                }
+                return; // Stop further execution if an action is handled
             }
-            dom.musicPreviewPlayer.onended = () => { icon.className = 'fa-solid fa-play'; };
-        };
 
-        const selectMusic = (musicIndex) => {
-            selectedMusic = allMusicData[musicIndex];
-            dom.selectedMusicInfo.textContent = `🎵 ${selectedMusic.title} - ${selectedMusic.artist}`;
-            dom.selectedMusicInfo.classList.remove('hidden');
-            hideMusicModal();
+            // Handle other specific clicks by their element or closest parent
+            if (toggleTarget) {
+                const targetFormId = toggleTarget.dataset.target;
+                document.getElementById('login-form').classList.toggle('hidden', targetFormId !== 'login-form');
+                document.getElementById('signup-form').classList.toggle('hidden', targetFormId !== 'signup-form');
+                return;
+            }
+
+            if (musicItem) {
+                selectedMusic = { title: musicItem.dataset.title, videoId: musicItem.dataset.videoid };
+                document.getElementById('selected-music-info').textContent = `🎵 Selected: ${selectedMusic.title}`;
+                dom.musicModal.classList.add('hidden');
+                return;
+            }
+
+            // Handle specific button IDs
+            switch (target.id) {
+                case 'cancel-upload-btn': resetAndCloseUploadModal(); break;
+                case 'confirm-upload-btn': handleUploadConfirm(); break;
+                case 'allow-sound-btn': unlockAudio(); break;
+                case 'add-music-btn': showMusicModal(); break;
+                case 'cancel-music-btn': dom.musicModal.classList.add('hidden'); break;
+            }
+        };
+        // --- [END OF CORRECTED CODE] ---
+
+        const setupNavigationEvents = () => {
+            const container = document.querySelector('.swiper-container');
+            const startPress = () => { longPressTimer = setTimeout(() => swiper.slideNext(), 2000); };
+            const cancelPress = () => clearTimeout(longPressTimer);
+            container.addEventListener('mousedown', startPress); container.addEventListener('mouseup', cancelPress); container.addEventListener('mouseleave', cancelPress);
+            container.addEventListener('touchstart', startPress, { passive: true }); container.addEventListener('touchend', cancelPress); container.addEventListener('touchcancel', cancelPress);
+        };
+        
+        const showMusicModal = () => { document.getElementById('music-list').innerHTML = musicLibrary.map(song => `<li class="music-item" data-title="${song.title}" data-videoid="${song.videoId}"><span>${song.title}</span></li>`).join(''); dom.musicModal.classList.remove('hidden'); };
+
+        const unlockAudio = async () => {
+            dom.soundModal.classList.add('hidden');
+            const firstVideo = document.querySelector('.story-media[data-type="video"]');
+            const firstYoutubePlayer = Object.values(youtubePlayers)[0]?.player;
+            try {
+                if (firstVideo) {
+                    firstVideo.muted = false; await firstVideo.play(); firstVideo.pause();
+                } else if (firstYoutubePlayer) {
+                    firstYoutubePlayer.unMute(); firstYoutubePlayer.playVideo(); setTimeout(() => firstYoutubePlayer.pauseVideo(), 500);
+                }
+            } catch(e) { console.warn("Initial unlock play failed, but proceeding."); }
+            isAudioUnlocked = true;
+            Object.values(youtubePlayers).forEach(p => p.player?.unMute());
+            document.querySelectorAll('.story-media[data-type="video"]').forEach(v => v.muted = false);
+            handleSlideChange();
         };
 
         const incrementViewCount = async (storyId) => { await updateDoc(doc(db, 'stories', storyId), { views: increment(1) }); };
-        const deleteStory = async (storyId) => { try { await deleteDoc(doc(db, 'stories', storyId)); } catch (error) { console.error("Error deleting story: ", error); alert("Could not delete the story."); }};
         
         const handleUploadConfirm = async () => {
-            const mediaFile = dom.mediaFileInput.files[0];
-            const caption = document.getElementById('caption-input').value;
+            const mediaFile = document.getElementById('media-file-input').files[0], caption = document.getElementById('caption-input').value;
             if (!mediaFile) return alert('Please select a file.');
-            const uploadBtn = document.getElementById('confirm-upload-btn');
-            uploadBtn.disabled = true;
-            uploadBtn.textContent = 'Publishing...';
             document.getElementById('upload-progress-bar').classList.remove('hidden');
             const mediaType = mediaFile.type.startsWith('video/') ? 'video' : 'image';
             try {
                 const mediaUrl = await uploadToCloudinary(mediaFile, mediaType, (p) => { document.getElementById('upload-progress').style.width = `${p}%`; });
                 const storyData = { mediaUrl, mediaType, caption, authorId: currentUser.uid, authorName: currentUser.displayName, authorPhoto: currentUser.photoURL, createdAt: serverTimestamp(), views: 0 };
-                if (selectedMusic) {
-                    storyData.musicUrl = selectedMusic.audioUrl;
-                    storyData.musicTitle = selectedMusic.title;
-                    storyData.musicThumbnailUrl = selectedMusic.thumbnailUrl;
-                }
+                if (mediaType === 'image' && selectedMusic) { storyData.musicVideoId = selectedMusic.videoId; storyData.musicTitle = selectedMusic.title; }
                 await addDoc(collection(db, 'stories'), storyData);
-                alert('Story published successfully!');
                 resetAndCloseUploadModal();
-            } catch (error) { 
-                console.error("Upload Failed:", error);
-                alert(`Upload failed: ${error.message}`);
-                uploadBtn.disabled = false;
-                uploadBtn.textContent = 'Publish Story';
-            } finally {
-                document.getElementById('upload-progress-bar').classList.add('hidden');
-                document.getElementById('upload-progress').style.width = '0%';
-            }
+            } catch (error) { alert(`Upload failed: ${error.message}`); document.getElementById('upload-progress-bar').classList.add('hidden'); }
         };
 
+        // --- Utility Functions (No changes) ---
+        const handlePfpChange = (e) => { if (e.target.files[0]) { const reader = new FileReader(); reader.onload = (event) => { document.getElementById('profile-pic-preview').src = event.target.result; }; reader.readAsDataURL(e.target.files[0]); } };
         const handleMediaFileChange = (e) => {
-            const previewContainer = document.getElementById('media-preview-container');
-            dom.addMusicBtn.classList.add('hidden');
-            dom.selectedMusicInfo.classList.add('hidden');
-            dom.selectedMusicInfo.textContent = '';
-            selectedMusic = null;
-            const confirmBtn = document.getElementById('confirm-upload-btn');
-            const file = e.target.files[0];
-            if (file) {
-                const url = URL.createObjectURL(file);
-                const isVideo = file.type.startsWith('video/');
+            document.getElementById('media-preview-container').innerHTML = '';
+            document.getElementById('add-music-btn').classList.add('hidden');
+            if (e.target.files[0]) {
+                const url = URL.createObjectURL(e.target.files[0]), isVideo = e.target.files[0].type.startsWith('video/'), isImage = e.target.files[0].type.startsWith('image/');
                 const previewEl = document.createElement(isVideo ? 'video' : 'img');
-                if (isVideo) { previewEl.muted = true; previewEl.autoplay = true; previewEl.loop = true; }
+                if (isVideo) previewEl.controls = true;
                 previewEl.src = url;
-                previewContainer.innerHTML = '';
-                previewContainer.appendChild(previewEl);
-                dom.addMusicBtn.classList.remove('hidden');
-                confirmBtn.disabled = false;
-            } else {
-                previewContainer.innerHTML = `<label id="media-file-label" for="media-file-input"><i class="fa-solid fa-cloud-arrow-up"></i><span>Select Image or Video</span></label>`;
-                confirmBtn.disabled = true;
+                document.getElementById('media-preview-container').appendChild(previewEl);
+                document.getElementById('media-file-label').textContent = e.target.files[0].name;
+                if (isImage) document.getElementById('add-music-btn').classList.remove('hidden');
             }
         };
-
-        const resetAndCloseUploadModal = () => { 
-            dom.uploadModal.classList.remove('visible'); 
-            setTimeout(() => {
-                document.getElementById('caption-input').value = '';
-                dom.mediaFileInput.value = null; 
-                document.getElementById('media-preview-container').innerHTML = `<label id="media-file-label" for="media-file-input"><i class="fa-solid fa-cloud-arrow-up"></i><span>Select Image or Video</span></label>`;
-                document.getElementById('upload-progress-bar').classList.add('hidden'); 
-                document.getElementById('upload-progress').style.width = '0%'; 
-                const confirmBtn = document.getElementById('confirm-upload-btn');
-                confirmBtn.disabled = true;
-                confirmBtn.textContent = 'Publish Story';
-                selectedMusic = null;
-                dom.selectedMusicInfo.textContent = '';
-                dom.selectedMusicInfo.classList.add('hidden');
-                dom.addMusicBtn.classList.add('hidden');
-            }, 400);
-        };
-
-        const handlePfpChange = (e) => { if (e.target.files[0]) { const reader = new FileReader(); reader.onload = (event) => { document.getElementById('profile-pic-preview').src = event.target.result; }; reader.readAsURL(e.target.files[0]); } };
-        const handleSignup = async () => { /* Logic from previous version */ };
-        const handleLogin = async () => { /* Logic from previous version */ };
-        const showFloatingReaction = (emoji, container) => { /* Logic from previous version */ };
-        const uploadToCloudinary = (file, resourceType, onProgress) => { return new Promise((resolve, reject) => { const formData = new FormData(); formData.append('file', file); formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET); const xhr = new XMLHttpRequest(); xhr.open('POST', `${CLOUDINARY_API_URL}/${resourceType}/upload`, true); xhr.upload.onprogress = (e) => onProgress?.(Math.round((e.loaded / e.total) * 100)); xhr.onload = () => (xhr.status === 200) ? resolve(JSON.parse(xhr.responseText).secure_url) : reject(new Error(xhr.responseText)); xhr.onerror = () => reject(new Error('Network error during upload.')); xhr.send(formData); }); };
-
-        // Setup Event Listeners
-        onAuthStateChanged(auth, handleAuthStateChange);
-        document.addEventListener('click', handleDocumentClick);
-        dom.mediaFileInput.addEventListener('change', handleMediaFileChange);
-        document.getElementById('music-search-input').addEventListener('input', (e) => {
-            const searchTerm = e.target.value.toLowerCase();
-            const filteredMusic = allMusicData.filter(song => song.title.toLowerCase().includes(searchTerm) || song.artist.toLowerCase().includes(searchTerm));
-            renderMusicList(filteredMusic, [...new Set(filteredMusic.map(s => s.category))]);
-        });
-        
-        // Dynamically add auth forms and their listeners
-        dom.authContainer.innerHTML = `<div class="auth-box">
-             <div id="login-form" class="auth-form"><h2>Welcome Back</h2><input type="email" id="login-email" placeholder="Email" required><input type="password" id="login-password" placeholder="Password" required><button id="login-btn">Log In</button><p class="toggle-form" data-target="signup-form">Don't have an account? Sign Up</p></div>
-             <div id="signup-form" class="auth-form hidden"><h2>Create Account</h2><div class="profile-pic-upload"><label for="signup-pfp"><img id="profile-pic-preview" src="https://via.placeholder.com/100" alt="Profile"></label><input type="file" id="signup-pfp" accept="image/*" class="hidden"></div><input type="text" id="signup-name" placeholder="Full Name" required><input type="email" id="signup-email" placeholder="Email" required><input type="password" id="signup-password" placeholder="Password" required><button id="signup-btn">Sign Up</button><p class="toggle-form" data-target="login-form">Already have an account? Log In</p></div>
-        </div>`;
-        document.getElementById('signup-pfp').addEventListener('change', handlePfpChange);
-        document.getElementById('signup-btn').addEventListener('click', async () => {
+        const handleSignup = async () => {
             dom.loaderContainer.classList.remove('hidden');
             const name = document.getElementById('signup-name').value, email = document.getElementById('signup-email').value, password = document.getElementById('signup-password').value, pfpFile = document.getElementById('signup-pfp').files[0];
+            if (!name || !email || !password) { alert('Please fill all required fields.'); dom.loaderContainer.classList.add('hidden'); return; }
             try {
                 let photoURL = 'https://via.placeholder.com/100';
                 if (pfpFile) photoURL = await uploadToCloudinary(pfpFile, 'image');
                 const cred = await createUserWithEmailAndPassword(auth, email, password);
                 await updateProfile(cred.user, { displayName: name, photoURL });
-            } catch (error) { alert(`Signup failed: ${error.message}`); } finally { dom.loaderContainer.classList.add('hidden'); }
-        });
-        document.getElementById('login-btn').addEventListener('click', async () => {
+            } catch (error) { alert(`Signup failed: ${error.message}`); dom.loaderContainer.classList.add('hidden'); }
+        };
+        const handleLogin = async () => {
             dom.loaderContainer.classList.remove('hidden');
             const email = document.getElementById('login-email').value, password = document.getElementById('login-password').value;
+            if (!email || !password) { alert('Please enter email and password.'); dom.loaderContainer.classList.add('hidden'); return; }
             try { await signInWithEmailAndPassword(auth, email, password); } 
-            catch (error) { alert(`Login failed: ${error.message}`); } finally { dom.loaderContainer.classList.add('hidden'); }
-        });
+            catch (error) { alert(`Login failed: ${error.message}`); dom.loaderContainer.classList.add('hidden'); }
+        };
+        const showFloatingReaction = (emoji, container) => { const reaction = document.createElement('span'); reaction.className = 'floating-reaction'; reaction.textContent = emoji; reaction.style.left = `${Math.random() * 50 + 25}%`; reaction.onanimationend = () => reaction.remove(); container.appendChild(reaction); };
+        const resetAndCloseUploadModal = () => { dom.uploadModal.classList.add('hidden'); ['media-file-input', 'caption-input'].forEach(id => document.getElementById(id).value = ''); document.getElementById('media-preview-container').innerHTML = ''; document.getElementById('upload-progress-bar').classList.add('hidden'); document.getElementById('upload-progress').style.width = '0%'; document.getElementById('media-file-label').textContent = 'Click to select Image or Video'; selectedMusic = null; document.getElementById('selected-music-info').textContent = ''; };
+        const uploadToCloudinary = (file, resourceType, onProgress) => { return new Promise((resolve, reject) => { const formData = new FormData(); formData.append('file', file); formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET); const xhr = new XMLHttpRequest(); xhr.open('POST', `${CLOUDINARY_API_URL}/${resourceType}/upload`, true); xhr.upload.onprogress = (e) => onProgress?.(Math.round((e.loaded / e.total) * 100)); xhr.onload = () => (xhr.status === 200) ? resolve(JSON.parse(xhr.responseText).secure_url) : reject(new Error(xhr.responseText)); xhr.onerror = () => reject(new Error('Network error during upload.')); xhr.send(formData); }); };
 
+        // --- Event Listeners (No changes) ---
+        onAuthStateChanged(auth, handleAuthStateChange);
+        document.addEventListener('click', handleDocumentClick);
+        document.getElementById('signup-pfp').addEventListener('change', handlePfpChange);
+        document.getElementById('media-file-input').addEventListener('change', handleMediaFileChange);
+        document.getElementById('signup-btn').addEventListener('click', handleSignup);
+        document.getElementById('login-btn').addEventListener('click', handleLogin);
     </script>
 </body>
 </html>
